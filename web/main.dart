@@ -43,6 +43,8 @@ class App {
   List<Recording> recordings = [];
   List<Map<String, dynamic>> playlists = [];
   String? activePlaylistId;
+  Recording? sheetRecording;
+  double? miniTouchStartY;
   Recording? current;
   MediaRecorder? recorder;
   MediaStream? stream;
@@ -97,6 +99,14 @@ class App {
     on('shuffleBtn', 'click', (_) { shuffle = !shuffle; _syncButtons(); toast(shuffle ? 'シャッフルをオンにしました。' : 'シャッフルをオフにしました。'); });
     on('repeatBtn', 'click', (_) { repeat = repeat == 'off' ? 'one' : repeat == 'one' ? 'all' : 'off'; _syncButtons(); });
     on('timerBtn', 'click', (_) => chooseTimer()); on('miniInfo', 'click', (_) => showView('playerView'));
+    on('miniPlayer', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);if(t!=null)miniTouchStartY=t.clientY.toDouble(); });
+    on('miniPlayer', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&miniTouchStartY!=null&&miniTouchStartY!-t.clientY>35)showView('playerView');miniTouchStartY=null; });
+    on('sheetClose', 'click', (_) => closeSheet()); on('actionSheet', 'click', (e) { if(e.target==el<HTMLElement>('actionSheet'))closeSheet(); });
+    on('sheetRename', 'click', (_) => sheetRename()); on('sheetExport', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r);closeSheet(); });
+    on('sheetShare', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r,share:true);closeSheet(); });
+    on('sheetDelete', 'click', (_) { final r=sheetRecording;closeSheet();if(r!=null)deleteRecording(r); });
+    on('sheetRemoveFromPlaylist', 'click', (_) => removeSheetRecordingFromPlaylist());
+    on('sheetNewPlaylist', 'click', (_) => createPlaylist(sheetRecording));
     on('seek', 'input', (e) { if (audio.duration.isFinite) audio.currentTime = (e.target as HTMLInputElement).valueAsNumber / 1000 * audio.duration; });
     on('persistBtn', 'click', (_) => requestPersistence()); on('exportMetaBtn', 'click', (_) => exportMetadata());
     on('exportAllBtn', 'click', (_) => exportAll()); on('deleteAllBtn', 'click', (_) => deleteAll());
@@ -116,11 +126,12 @@ class App {
   Future<void> reloadPlaylists() async {
     final raw = await bridgeListPlaylists().toDart;
     playlists = (jsonDecode(raw.toDart) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    if (activePlaylistId != null && !playlists.any((p) => p['id'] == activePlaylistId)) activePlaylistId = null;
+    if (activePlaylistId != null && activePlaylistId != '__favorites__' && !playlists.any((p) => p['id'] == activePlaylistId)) activePlaylistId = null;
     renderPlaylists(); renderList();
   }
 
   List<Recording> get playQueue {
+    if (activePlaylistId == '__favorites__') return recordings.where((r) => r.favorite).toList();
     final active = activePlaylistId == null ? null : playlists.where((p) => p['id'] == activePlaylistId).firstOrNull;
     if (active == null) return recordings;
     final ids = List<String>.from(active['recordingIds'] as List? ?? const []);
@@ -151,13 +162,15 @@ class App {
     final host = el<HTMLElement>('playlistTabs'); host.textContent = '';
     final all = HTMLButtonElement()..textContent = 'すべて (${recordings.length})'..className = activePlaylistId == null ? 'active' : '';
     all.addEventListener('click', ((Event _) { activePlaylistId = null; renderPlaylists(); renderList(); }).toJS); host.append(all);
+    final favorites = HTMLButtonElement()..textContent = '★ お気に入り (${recordings.where((r)=>r.favorite).length})'..className = activePlaylistId == '__favorites__' ? 'active' : '';
+    favorites.addEventListener('click', ((Event _) { activePlaylistId = '__favorites__'; renderPlaylists(); renderList(); }).toJS); host.append(favorites);
     for (final p in playlists) {
       final count = (p['recordingIds'] as List?)?.length ?? 0;
       final button = HTMLButtonElement()..textContent = '${p['name']} ($count)'..className = activePlaylistId == p['id'] ? 'active' : '';
       button.addEventListener('click', ((Event _) { activePlaylistId = p['id'] as String; renderPlaylists(); renderList(); }).toJS);
       button.addEventListener('dblclick', ((Event _) { deletePlaylist(p); }).toJS); host.append(button);
     }
-    el<HTMLElement>('deletePlaylistBtn').classList.toggle('hidden', activePlaylistId == null);
+    el<HTMLElement>('deletePlaylistBtn').classList.toggle('hidden', activePlaylistId == null || activePlaylistId == '__favorites__');
     el<HTMLElement>('playAllBtn').textContent = activePlaylistId == null ? '▶ すべて再生' : '▶ リストを再生';
   }
 
@@ -165,8 +178,9 @@ class App {
     for (final v in ['recordView','playerView','settingsView']) el<HTMLElement>(v).classList.add('hidden');
     el<HTMLElement>(id).classList.remove('hidden');
     el<HTMLElement>('recordFab').classList.add('hidden');
+    el<HTMLElement>('app').classList.add('view-open');
   }
-  void showLibrary(){for(final v in ['recordView','playerView','settingsView'])el<HTMLElement>(v).classList.add('hidden');el<HTMLElement>('recordFab').classList.remove('hidden');}
+  void showLibrary(){for(final v in ['recordView','playerView','settingsView'])el<HTMLElement>(v).classList.add('hidden');el<HTMLElement>('recordFab').classList.remove('hidden');el<HTMLElement>('app').classList.remove('view-open');}
   void closeRecord(){if(recorder!=null&&recorder!.state!='inactive'){toast('先に録音を保存またはキャンセルしてください。');return;}showLibrary();}
 
   Future<void> startRecording() async {
@@ -209,16 +223,21 @@ class App {
   void previous(){if(audio.currentTime>4){audio.currentTime=0;return;}final queue=playQueue;if(queue.isEmpty)return;final i=queue.indexWhere((r)=>r.id==current?.id);if(i>0)playRecording(queue[i-1]);else if(repeat=='all')playRecording(queue.last);}
   int _randomOther(int i,int length){var n=i;while(n==i)n=Random().nextInt(length);return n;}
   void onEnded(){if(sleepAt!=null&&sleepAt!.millisecondsSinceEpoch==-1){clearSleep();return;}if(repeat=='one'&&current!=null){audio.currentTime=0;audio.play();}else next();}
-  void _syncPlayer(){final playing=!audio.paused;el<HTMLElement>('playBtn').textContent=playing?'Ⅱ':'▶';el<HTMLElement>('miniPlay').textContent=playing?'Ⅱ':'▶';final d=audio.duration.isFinite?audio.duration:current?.duration??0;el<HTMLElement>('currentTime').textContent=formatTime(audio.currentTime);el<HTMLElement>('totalTime').textContent=formatTime(d);el<HTMLElement>('miniTime').textContent='${formatTime(audio.currentTime)} / ${formatTime(d)}';el<HTMLInputElement>('seek').value=d>0?(audio.currentTime/d*1000).clamp(0,1000).toString():'0';renderList();}
-  void _updatePlayerMeta(){final r=current;if(r==null)return;el<HTMLElement>('playerTitle').textContent=r.title;el<HTMLElement>('miniTitle').textContent=r.title;el<HTMLElement>('playerDate').textContent=r.createdAt.split('T').first;el<HTMLElement>('miniPlayer').classList.remove('hidden');}
+  void _syncPlayer(){final playing=!audio.paused;el<HTMLElement>('playBtn').textContent=playing?'Ⅱ':'▶';el<HTMLElement>('miniPlay').textContent=playing?'Ⅱ':'▶';final d=audio.duration.isFinite?audio.duration:current?.duration??0;el<HTMLElement>('currentTime').textContent=formatTime(audio.currentTime);el<HTMLElement>('totalTime').textContent=formatTime(d);el<HTMLElement>('miniTime').textContent='${formatTime(audio.currentTime)} / ${formatTime(d)}';final progress=d>0?(audio.currentTime/d*1000).clamp(0,1000):0;el<HTMLInputElement>('seek').value=progress.toString();el<HTMLElement>('miniProgress').style.width='${progress/10}%';}
+  void _updatePlayerMeta(){final r=current;if(r==null)return;el<HTMLElement>('playerTitle').textContent=r.title;el<HTMLElement>('miniTitle').textContent=r.title;el<HTMLElement>('playerDate').textContent=r.createdAt.split('T').first;el<HTMLElement>('miniPlayer').classList.remove('hidden');el<HTMLElement>('app').classList.add('player-active');}
   void _syncButtons(){el<HTMLElement>('shuffleBtn').classList.toggle('active',shuffle);final b=el<HTMLElement>('repeatBtn');b.classList.toggle('active',repeat!='off');b.textContent=repeat=='one'?'↻¹':'↻';}
 
-  Future<void> toggleFavorite(Recording r) async{await bridgeUpdate(r.id,jsonEncode({'favorite':!r.favorite})).toDart;await reload();}
-  Future<void> createPlaylist() async {final name=window.prompt('新しいプレイリスト名')?.trim();if(name==null||name.isEmpty)return;final now=DateTime.now();final row={'id':'playlist-${now.microsecondsSinceEpoch}','name':name,'recordingIds':<String>[],'createdAt':now.toUtc().toIso8601String()};await bridgeSavePlaylist(jsonEncode(row)).toDart;activePlaylistId=row['id'] as String;await reloadPlaylists();toast('プレイリスト「$name」を作成しました。');}
+  Future<void> toggleFavorite(Recording r) async{await bridgeUpdate(r.id,jsonEncode({'favorite':!r.favorite})).toDart;await reload();renderPlaylists();}
+  Future<void> createPlaylist([Recording? add]) async {final name=window.prompt('新しいプレイリスト名')?.trim();if(name==null||name.isEmpty)return;final now=DateTime.now();final row={'id':'playlist-${now.microsecondsSinceEpoch}','name':name,'recordingIds':add==null?<String>[]:<String>[add.id],'createdAt':now.toUtc().toIso8601String()};await bridgeSavePlaylist(jsonEncode(row)).toDart;if(add==null)activePlaylistId=row['id'] as String;await reloadPlaylists();if(add!=null)openSheet(add);toast('プレイリスト「$name」を作成しました。');}
   Future<void> addToPlaylist(Recording r) async {if(playlists.isEmpty){await createPlaylist();if(playlists.isEmpty)return;}final names=playlists.map((p)=>p['name']).join(' / ');final name=window.prompt('追加先を入力してください：$names',playlists.first['name'] as String)?.trim();final p=playlists.where((x)=>x['name']==name).firstOrNull;if(p==null){toast('プレイリストが見つかりません。');return;}final ids=List<String>.from(p['recordingIds'] as List? ?? const []);if(!ids.contains(r.id))ids.add(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;await reloadPlaylists();toast('「${p['name']}」に追加しました。');}
   Future<void> deletePlaylist(Map<String,dynamic> p) async {if(!window.confirm('プレイリスト「${p['name']}」を削除しますか？録音ファイルは削除されません。'))return;await bridgeRemovePlaylist(p['id'] as String).toDart;activePlaylistId=null;await reloadPlaylists();}
-  Future<void> deleteRecording(Recording r) async {if(!window.confirm('「${r.title}」を削除しますか？この操作は元に戻せません。'))return;await bridgeRemove(r.id).toDart;for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;}if(current?.id==r.id){audio.pause();audio.removeAttribute('src');current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');}await reload();await reloadPlaylists();await refreshStorage();toast('削除しました。');}
-  Future<void> recordingMenu(Recording r) async{final extra=activePlaylistId==null?'':' / リストから外す';final action=window.prompt('操作を入力：プレイリスト / 名前変更 / 書き出し / 共有 / 削除$extra','プレイリスト');if(action==null)return;if(action.contains('外す')&&activePlaylistId!=null){final p=playlists.firstWhere((x)=>x['id']==activePlaylistId);final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;await reloadPlaylists();toast('プレイリストから外しました。');}else if(action.contains('プレイリスト')){await addToPlaylist(r);}else if(action.contains('名前')){final name=window.prompt('新しいタイトル',r.title)?.trim();if(name!=null&&name.isNotEmpty){await bridgeUpdate(r.id,jsonEncode({'title':name})).toDart;await reload();if(current?.id==r.id){current=recordings.firstWhere((x)=>x.id==r.id);_updatePlayerMeta();}}}else if(action.contains('共有')){await exportOne(r,share:true);}else if(action.contains('書き出し')||action.contains('保存')){await exportOne(r);}else if(action.contains('削除')){await deleteRecording(r);}}
+  Future<void> deleteRecording(Recording r) async {if(!window.confirm('「${r.title}」を削除しますか？この操作は元に戻せません。'))return;await bridgeRemove(r.id).toDart;for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;}if(current?.id==r.id){audio.pause();audio.removeAttribute('src');current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');el<HTMLElement>('app').classList.remove('player-active');}await reload();await reloadPlaylists();await refreshStorage();toast('削除しました。');}
+  void recordingMenu(Recording r) => openSheet(r);
+  void openSheet(Recording r){sheetRecording=r;el<HTMLElement>('sheetTitle').textContent=r.title;final host=el<HTMLElement>('sheetPlaylistChoices');host.textContent='';for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const []);final button=HTMLButtonElement()..textContent=p['name'] as String..className=ids.contains(r.id)?'added':'';button.addEventListener('click',((Event _){toggleSheetPlaylist(p,r);}).toJS);host.append(button);}el<HTMLElement>('sheetRemoveFromPlaylist').classList.toggle('hidden',activePlaylistId==null||activePlaylistId=='__favorites__');el<HTMLElement>('actionSheet').classList.remove('hidden');}
+  void closeSheet(){el<HTMLElement>('actionSheet').classList.add('hidden');sheetRecording=null;}
+  Future<void> toggleSheetPlaylist(Map<String,dynamic> p,Recording r)async{final ids=List<String>.from(p['recordingIds'] as List? ?? const []);final added=ids.contains(r.id);if(added){ids.remove(r.id);}else{ids.add(r.id);}p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;await reloadPlaylists();openSheet(r);toast(added?'プレイリストから外しました。':'プレイリストに追加しました。');}
+  Future<void> sheetRename()async{final r=sheetRecording;if(r==null)return;final name=window.prompt('新しいタイトル',r.title)?.trim();if(name==null||name.isEmpty)return;await bridgeUpdate(r.id,jsonEncode({'title':name})).toDart;await reload();final updated=recordings.firstWhere((x)=>x.id==r.id);if(current?.id==r.id){current=updated;_updatePlayerMeta();}openSheet(updated);}
+  Future<void> removeSheetRecordingFromPlaylist()async{final r=sheetRecording;if(r==null||activePlaylistId==null||activePlaylistId=='__favorites__')return;final p=playlists.firstWhere((x)=>x['id']==activePlaylistId);final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;closeSheet();await reloadPlaylists();toast('プレイリストから外しました。');}
   Future<void> exportOne(Recording r,{bool share=false})async{try{final blob=await bridgeGetBlob(r.id).toDart;final name='${safeName(r.title)}.${r.extension}';final shared=share ? (await bridgeShare(blob,name,r.title).toDart).toDart : false;if(shared){return;}bridgeDownload(blob,name);}catch(e){toast('ファイルを書き出せませんでした。');}}
   Future<void> importFiles()async{final input=el<HTMLInputElement>('fileInput');final files=input.files;if(files==null)return;for(var i=0;i<files.length;i++){final f=files.item(i);if(f==null)continue;try{final now=DateTime.now(),id='import-${now.microsecondsSinceEpoch}-$i';final ext=f.name.contains('.')?f.name.split('.').last.toLowerCase():extensionFor(f.type);final meta={'id':id,'title':f.name.replaceFirst(RegExp(r'\.[^.]+$'),''),'createdAt':now.toUtc().toIso8601String(),'updatedAt':now.toUtc().toIso8601String(),'duration':0,'mimeType':f.type.isEmpty?'audio/$ext':f.type,'fileExtension':ext,'size':f.size,'storageKey':'recording-$id.$ext','favorite':false,'playCount':0};await bridgeSave(jsonEncode(meta),f).toDart;}catch(_){toast('${f.name}を読み込めませんでした。');}}input.value='';await reload();await refreshStorage();toast('ファイルを読み込みました。');}
 
@@ -226,7 +245,7 @@ class App {
   Future<void> requestPersistence()async{final ok=(await bridgePersist().toDart).toDart;toast(ok?'ブラウザが永続保存を許可しました。':'永続保存は許可されませんでした。ファイルのバックアップをおすすめします。');await refreshStorage();}
   void exportMetadata(){final blob=Blob([jsonEncode(recordings.map((r)=>r.data).toList()).toJS].toJS,BlobPropertyBag(type:'application/json'));bridgeDownload(blob,'song-pocket-backup-${DateTime.now().toIso8601String().split('T').first}.json');}
   Future<void> exportAll()async{if(recordings.isEmpty){toast('書き出すファイルがありません。');return;}toast('ファイルごとに保存確認が複数回表示される場合があります。');for(final r in recordings){await exportOne(r);await Future<void>.delayed(const Duration(milliseconds:400));}}
-  Future<void> deleteAll()async{if(!window.confirm('すべての録音と情報を削除しますか？先に大切なファイルをバックアップしてください。'))return;if(window.prompt('削除するには「すべて削除」と入力してください。')!='すべて削除')return;audio.pause();await bridgeClear().toDart;current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');await reload();await refreshStorage();toast('すべてのデータを削除しました。');}
+  Future<void> deleteAll()async{if(!window.confirm('すべての録音と情報を削除しますか？先に大切なファイルをバックアップしてください。'))return;if(window.prompt('削除するには「すべて削除」と入力してください。')!='すべて削除')return;audio.pause();await bridgeClear().toDart;current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');el<HTMLElement>('app').classList.remove('player-active');playlists=[];activePlaylistId=null;await reload();await reloadPlaylists();await refreshStorage();toast('すべてのデータを削除しました。');}
   void chooseTimer(){final v=window.prompt('終了時間を入力：オフ / 10 / 20 / 30 / 60 / 曲終了','10');if(v==null)return;clearSleep(show:false);if(v=='曲終了'){sleepAt=DateTime.fromMillisecondsSinceEpoch(-1);el<HTMLElement>('timerBtn').textContent='◷ この曲の終了後に停止';return;}final m=int.tryParse(v);if(m==null||m<=0){toast('スリープタイマーをオフにしました。');return;}sleepAt=DateTime.now().add(Duration(minutes:m));sleepTimer=Timer.periodic(const Duration(seconds:1),(_){final left=sleepAt!.difference(DateTime.now());if(left<=Duration.zero){audio.pause();clearSleep();toast('スリープタイマーで再生を停止しました。');}else el<HTMLElement>('timerBtn').textContent='◷ 終了まで ${left.inMinutes}:${two(left.inSeconds%60)}';});}
   void clearSleep({bool show=true}){sleepTimer?.cancel();sleepTimer=null;sleepAt=null;el<HTMLElement>('timerBtn').textContent='◷ スリープタイマー：オフ';if(show)audio.pause();}
   void _renderCompatibility(){final rows={'安全な接続':capabilities['secure'],'マイク録音':capabilities['media']==true&&capabilities['recorder']==true,'ローカルDB':capabilities['indexedDb'],'高度なファイル保存':capabilities['opfs'],'ロック画面操作':capabilities['mediaSession']};el<HTMLElement>('compatDetails').textContent=rows.entries.map((e)=>'${e.value==true?'✓':'△'} ${e.key}').join('\n');final problems=<String>[];if(capabilities['secure']!=true)problems.add('HTTPSではないためマイクを利用できません。');if(capabilities['recorder']!=true)problems.add('このブラウザは録音に対応していません。');if(problems.isNotEmpty){final n=el<HTMLElement>('compatNotice');n.textContent=problems.join(' ');n.classList.remove('hidden');}}
