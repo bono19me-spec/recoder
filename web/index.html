@@ -85,6 +85,14 @@
         <button id="sheetDelete" class="danger-action">⌫ 録音を削除</button><button id="sheetClose" class="sheet-close">キャンセル</button>
       </section>
     </div>
+    <div id="timerSheet" class="sheet-backdrop hidden">
+      <section class="action-sheet timer-sheet" role="dialog" aria-modal="true" aria-labelledby="timerSheetTitle">
+        <div class="sheet-handle"></div><h2 id="timerSheetTitle">スリープタイマー</h2>
+        <div class="timer-options"><button id="timerOff">オフ</button><button id="timer10">10分</button><button id="timer20">20分</button><button id="timer30">30分</button><button id="timer60">60分</button><button id="timerTrack">この曲の終了後</button></div>
+        <label class="custom-timer"><span>カスタム時間</span><div><input id="customTimerMinutes" type="number" min="1" max="1440" inputmode="numeric" placeholder="45"><span>分</span><button id="customTimerApply">設定</button></div></label>
+        <button id="timerSheetClose" class="sheet-close">キャンセル</button>
+      </section>
+    </div>
     <div id="toast" class="toast"></div>
     <audio id="audio" preload="metadata"></audio>
   </div>

@@ -45,6 +45,8 @@ class App {
   String? activePlaylistId;
   Recording? sheetRecording;
   double? miniTouchStartY;
+  double? playerTouchStartY, sheetTouchStartY;
+  bool playerHistoryActive = false;
   Recording? current;
   MediaRecorder? recorder;
   MediaStream? stream;
@@ -73,6 +75,7 @@ class App {
       if (recorder != null && recorder!.state != 'inactive') e.preventDefault();
     }).toJS);
     document.addEventListener('visibilitychange', ((Event _) => _syncPlayer()).toJS);
+    window.addEventListener('popstate', ((PopStateEvent _) { if(playerHistoryActive){playerHistoryActive=false;showLibrary();} }).toJS);
   }
 
   void _bind() {
@@ -84,7 +87,7 @@ class App {
     on('recordCloseBtn', 'click', (_) => closeRecord());
     on('settingsBtn', 'click', (_) => showView('settingsView'));
     on('settingsCloseBtn', 'click', (_) => showLibrary());
-    on('playerCloseBtn', 'click', (_) => showLibrary());
+    on('playerCloseBtn', 'click', (_) => collapsePlayer());
     on('importBtn', 'click', (_) => el<HTMLInputElement>('fileInput').click());
     on('playAllBtn', 'click', (_) => playAll());
     on('createPlaylistBtn', 'click', (_) => createPlaylist());
@@ -98,15 +101,22 @@ class App {
     on('forwardBtn', 'click', (_) => audio.currentTime = min(audio.duration, audio.currentTime + 10));
     on('shuffleBtn', 'click', (_) { shuffle = !shuffle; _syncButtons(); toast(shuffle ? 'シャッフルをオンにしました。' : 'シャッフルをオフにしました。'); });
     on('repeatBtn', 'click', (_) { repeat = repeat == 'off' ? 'one' : repeat == 'one' ? 'all' : 'off'; _syncButtons(); });
-    on('timerBtn', 'click', (_) => chooseTimer()); on('miniInfo', 'click', (_) => showView('playerView'));
+    on('timerBtn', 'click', (_) => openTimerSheet()); on('miniInfo', 'click', (_) => expandPlayer());
     on('miniPlayer', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);if(t!=null)miniTouchStartY=t.clientY.toDouble(); });
-    on('miniPlayer', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&miniTouchStartY!=null&&miniTouchStartY!-t.clientY>35)showView('playerView');miniTouchStartY=null; });
+    on('miniPlayer', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&miniTouchStartY!=null&&miniTouchStartY!-t.clientY>35)expandPlayer();miniTouchStartY=null; });
+    on('playerView', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);if(t!=null)playerTouchStartY=t.clientY.toDouble(); });
+    on('playerView', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&playerTouchStartY!=null&&t.clientY-playerTouchStartY!>55)collapsePlayer();playerTouchStartY=null; });
     on('sheetClose', 'click', (_) => closeSheet()); on('actionSheet', 'click', (e) { if(e.target==el<HTMLElement>('actionSheet'))closeSheet(); });
     on('sheetRename', 'click', (_) => sheetRename()); on('sheetExport', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r);closeSheet(); });
     on('sheetShare', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r,share:true);closeSheet(); });
     on('sheetDelete', 'click', (_) { final r=sheetRecording;closeSheet();if(r!=null)deleteRecording(r); });
     on('sheetRemoveFromPlaylist', 'click', (_) => removeSheetRecordingFromPlaylist());
     on('sheetNewPlaylist', 'click', (_) => createPlaylist(sheetRecording));
+    on('actionSheet', 'touchstart', sheetTouchStart);on('actionSheet', 'touchend', sheetTouchEnd);
+    on('timerSheet', 'touchstart', sheetTouchStart);on('timerSheet', 'touchend', sheetTouchEnd);
+    on('timerSheetClose', 'click', (_) => closeTimerSheet());on('timerSheet', 'click', (e){if(e.target==el<HTMLElement>('timerSheet'))closeTimerSheet();});
+    on('timerOff', 'click', (_) => setSleepMinutes(0));on('timer10', 'click', (_) => setSleepMinutes(10));on('timer20', 'click', (_) => setSleepMinutes(20));on('timer30', 'click', (_) => setSleepMinutes(30));on('timer60', 'click', (_) => setSleepMinutes(60));on('timerTrack', 'click', (_) => setSleepAfterTrack());
+    on('customTimerApply', 'click', (_) { final m=el<HTMLInputElement>('customTimerMinutes').valueAsNumber;if(m.isFinite&&m>0)setSleepMinutes(m.round());else toast('1分以上の時間を入力してください。'); });
     on('seek', 'input', (e) { if (audio.duration.isFinite) audio.currentTime = (e.target as HTMLInputElement).valueAsNumber / 1000 * audio.duration; });
     on('persistBtn', 'click', (_) => requestPersistence()); on('exportMetaBtn', 'click', (_) => exportMetadata());
     on('exportAllBtn', 'click', (_) => exportAll()); on('deleteAllBtn', 'click', (_) => deleteAll());
@@ -151,8 +161,7 @@ class App {
       final detail = document.createElement('small')..textContent='${date == null ? '' : '${date.month}.${date.day}'}  ·  ${formatTime(r.duration)}  ·  ${formatBytes(r.size)}'; info.append(title); info.append(detail);
       final fav=HTMLButtonElement()..className='favorite ${r.favorite?'on':''}'..textContent=r.favorite?'★':'☆'..ariaLabel='お気に入り'; fav.addEventListener('click', ((Event _) { toggleFavorite(r); }).toJS);
       final more=HTMLButtonElement()..className='more'..textContent='⋮'..ariaLabel='その他'; more.addEventListener('click', ((Event _) { recordingMenu(r); }).toJS);
-      final remove=HTMLButtonElement()..className='item-delete'..textContent='⌫'..ariaLabel='${r.title}を削除'; remove.addEventListener('click', ((Event _) { deleteRecording(r); }).toJS);
-      item.append(play);item.append(info);item.append(fav);item.append(more);item.append(remove);host.append(item);
+      item.append(play);item.append(info);item.append(fav);item.append(more);host.append(item);
     }
     el<HTMLDivElement>('emptyState').classList.toggle('hidden', list.isNotEmpty);
     el<HTMLElement>('settingsCount').textContent='${recordings.length}件';
@@ -181,6 +190,8 @@ class App {
     el<HTMLElement>('app').classList.add('view-open');
   }
   void showLibrary(){for(final v in ['recordView','playerView','settingsView'])el<HTMLElement>(v).classList.add('hidden');el<HTMLElement>('recordFab').classList.remove('hidden');el<HTMLElement>('app').classList.remove('view-open');}
+  void expandPlayer(){if(current==null)return;showView('playerView');if(!playerHistoryActive){window.history.pushState({'player':true}.jsify(),'','${window.location.pathname}${window.location.search}#player');playerHistoryActive=true;}}
+  void collapsePlayer(){if(playerHistoryActive){window.history.back();}else{showLibrary();}}
   void closeRecord(){if(recorder!=null&&recorder!.state!='inactive'){toast('先に録音を保存またはキャンセルしてください。');return;}showLibrary();}
 
   Future<void> startRecording() async {
@@ -235,6 +246,8 @@ class App {
   void recordingMenu(Recording r) => openSheet(r);
   void openSheet(Recording r){sheetRecording=r;el<HTMLElement>('sheetTitle').textContent=r.title;final host=el<HTMLElement>('sheetPlaylistChoices');host.textContent='';for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const []);final button=HTMLButtonElement()..textContent=p['name'] as String..className=ids.contains(r.id)?'added':'';button.addEventListener('click',((Event _){toggleSheetPlaylist(p,r);}).toJS);host.append(button);}el<HTMLElement>('sheetRemoveFromPlaylist').classList.toggle('hidden',activePlaylistId==null||activePlaylistId=='__favorites__');el<HTMLElement>('actionSheet').classList.remove('hidden');}
   void closeSheet(){el<HTMLElement>('actionSheet').classList.add('hidden');sheetRecording=null;}
+  void sheetTouchStart(Event event){final t=(event as TouchEvent).touches.item(0);if(t!=null)sheetTouchStartY=t.clientY.toDouble();}
+  void sheetTouchEnd(Event event){final t=(event as TouchEvent).changedTouches.item(0);if(t!=null&&sheetTouchStartY!=null&&t.clientY-sheetTouchStartY!>55){if(!el<HTMLElement>('actionSheet').classList.contains('hidden'))closeSheet();if(!el<HTMLElement>('timerSheet').classList.contains('hidden'))closeTimerSheet();}sheetTouchStartY=null;}
   Future<void> toggleSheetPlaylist(Map<String,dynamic> p,Recording r)async{final ids=List<String>.from(p['recordingIds'] as List? ?? const []);final added=ids.contains(r.id);if(added){ids.remove(r.id);}else{ids.add(r.id);}p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;await reloadPlaylists();openSheet(r);toast(added?'プレイリストから外しました。':'プレイリストに追加しました。');}
   Future<void> sheetRename()async{final r=sheetRecording;if(r==null)return;final name=window.prompt('新しいタイトル',r.title)?.trim();if(name==null||name.isEmpty)return;await bridgeUpdate(r.id,jsonEncode({'title':name})).toDart;await reload();final updated=recordings.firstWhere((x)=>x.id==r.id);if(current?.id==r.id){current=updated;_updatePlayerMeta();}openSheet(updated);}
   Future<void> removeSheetRecordingFromPlaylist()async{final r=sheetRecording;if(r==null||activePlaylistId==null||activePlaylistId=='__favorites__')return;final p=playlists.firstWhere((x)=>x['id']==activePlaylistId);final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;closeSheet();await reloadPlaylists();toast('プレイリストから外しました。');}
@@ -246,7 +259,10 @@ class App {
   void exportMetadata(){final blob=Blob([jsonEncode(recordings.map((r)=>r.data).toList()).toJS].toJS,BlobPropertyBag(type:'application/json'));bridgeDownload(blob,'song-pocket-backup-${DateTime.now().toIso8601String().split('T').first}.json');}
   Future<void> exportAll()async{if(recordings.isEmpty){toast('書き出すファイルがありません。');return;}toast('ファイルごとに保存確認が複数回表示される場合があります。');for(final r in recordings){await exportOne(r);await Future<void>.delayed(const Duration(milliseconds:400));}}
   Future<void> deleteAll()async{if(!window.confirm('すべての録音と情報を削除しますか？先に大切なファイルをバックアップしてください。'))return;if(window.prompt('削除するには「すべて削除」と入力してください。')!='すべて削除')return;audio.pause();await bridgeClear().toDart;current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');el<HTMLElement>('app').classList.remove('player-active');playlists=[];activePlaylistId=null;await reload();await reloadPlaylists();await refreshStorage();toast('すべてのデータを削除しました。');}
-  void chooseTimer(){final v=window.prompt('終了時間を入力：オフ / 10 / 20 / 30 / 60 / 曲終了','10');if(v==null)return;clearSleep(show:false);if(v=='曲終了'){sleepAt=DateTime.fromMillisecondsSinceEpoch(-1);el<HTMLElement>('timerBtn').textContent='◷ この曲の終了後に停止';return;}final m=int.tryParse(v);if(m==null||m<=0){toast('スリープタイマーをオフにしました。');return;}sleepAt=DateTime.now().add(Duration(minutes:m));sleepTimer=Timer.periodic(const Duration(seconds:1),(_){final left=sleepAt!.difference(DateTime.now());if(left<=Duration.zero){audio.pause();clearSleep();toast('スリープタイマーで再生を停止しました。');}else el<HTMLElement>('timerBtn').textContent='◷ 終了まで ${left.inMinutes}:${two(left.inSeconds%60)}';});}
+  void openTimerSheet(){el<HTMLElement>('timerSheet').classList.remove('hidden');}
+  void closeTimerSheet(){el<HTMLElement>('timerSheet').classList.add('hidden');}
+  void setSleepAfterTrack(){clearSleep(show:false);sleepAt=DateTime.fromMillisecondsSinceEpoch(-1);el<HTMLElement>('timerBtn').textContent='◷ この曲の終了後に停止';closeTimerSheet();}
+  void setSleepMinutes(int minutes){clearSleep(show:false);closeTimerSheet();if(minutes<=0){toast('スリープタイマーをオフにしました。');return;}sleepAt=DateTime.now().add(Duration(minutes:minutes));sleepTimer=Timer.periodic(const Duration(seconds:1),(_){final left=sleepAt!.difference(DateTime.now());if(left<=Duration.zero){audio.pause();clearSleep();toast('スリープタイマーで再生を停止しました。');}else el<HTMLElement>('timerBtn').textContent='◷ 終了まで ${left.inMinutes}:${two(left.inSeconds%60)}';});toast('$minutes分後に再生を停止します。');}
   void clearSleep({bool show=true}){sleepTimer?.cancel();sleepTimer=null;sleepAt=null;el<HTMLElement>('timerBtn').textContent='◷ スリープタイマー：オフ';if(show)audio.pause();}
   void _renderCompatibility(){final rows={'安全な接続':capabilities['secure'],'マイク録音':capabilities['media']==true&&capabilities['recorder']==true,'ローカルDB':capabilities['indexedDb'],'高度なファイル保存':capabilities['opfs'],'ロック画面操作':capabilities['mediaSession']};el<HTMLElement>('compatDetails').textContent=rows.entries.map((e)=>'${e.value==true?'✓':'△'} ${e.key}').join('\n');final problems=<String>[];if(capabilities['secure']!=true)problems.add('HTTPSではないためマイクを利用できません。');if(capabilities['recorder']!=true)problems.add('このブラウザは録音に対応していません。');if(problems.isNotEmpty){final n=el<HTMLElement>('compatNotice');n.textContent=problems.join(' ');n.classList.remove('hidden');}}
   void _setMediaSession(){try{window.navigator.mediaSession.metadata=MediaMetadata(MediaMetadataInit(title:current!.title,artist:'うたポケット'));window.navigator.mediaSession.setActionHandler('play',((JSAny? _)=>audio.play()).toJS);window.navigator.mediaSession.setActionHandler('pause',((JSAny? _)=>audio.pause()).toJS);window.navigator.mediaSession.setActionHandler('nexttrack',((JSAny? _)=>next()).toJS);window.navigator.mediaSession.setActionHandler('previoustrack',((JSAny? _)=>previous()).toJS);}catch(_){}}

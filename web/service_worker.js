@@ -1,4 +1,4 @@
-const CACHE='song-pocket-v5-player-ui';
+const CACHE='song-pocket-v6-player-ui';
 const SHELL=['./','index.html','styles.css','main.dart.js','interop.js','manifest.webmanifest','icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
