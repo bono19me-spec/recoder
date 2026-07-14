@@ -57,6 +57,7 @@ class App {
   DateTime? pauseStarted;
   String currentUrl = '';
   bool shuffle = false;
+  bool singlePlayback = false;
   String repeat = 'off';
   String query = '';
   String sort = 'new';
@@ -112,7 +113,6 @@ class App {
     on('sheetDelete', 'click', (_) { final r=sheetRecording;closeSheet();if(r!=null)deleteRecording(r); });
     on('sheetRemoveFromPlaylist', 'click', (_) => removeSheetRecordingFromPlaylist());
     on('sheetNewPlaylist', 'click', (_) => createPlaylist(sheetRecording));
-    on('actionSheet', 'touchstart', sheetTouchStart);on('actionSheet', 'touchend', sheetTouchEnd);
     on('timerSheet', 'touchstart', sheetTouchStart);on('timerSheet', 'touchend', sheetTouchEnd);
     on('timerSheetClose', 'click', (_) => closeTimerSheet());on('timerSheet', 'click', (e){if(e.target==el<HTMLElement>('timerSheet'))closeTimerSheet();});
     on('timerOff', 'click', (_) => setSleepMinutes(0));on('timer10', 'click', (_) => setSleepMinutes(10));on('timer20', 'click', (_) => setSleepMinutes(20));on('timer30', 'click', (_) => setSleepMinutes(30));on('timer60', 'click', (_) => setSleepMinutes(60));on('timerTrack', 'click', (_) => setSleepAfterTrack());
@@ -154,7 +154,7 @@ class App {
     final host = el<HTMLDivElement>('recordingList'); host.textContent = '';
     for (final r in list) {
       final item = HTMLDivElement()..className='recording-item';
-      final play = HTMLButtonElement()..className='item-play'..textContent=current?.id==r.id&&!audio.paused?'Ⅱ':'▶'..ariaLabel='${r.title}を再生'; play.addEventListener('click', ((Event _) { playRecording(r); }).toJS);
+      final play = HTMLButtonElement()..className='item-play'..textContent=current?.id==r.id&&!audio.paused?'Ⅱ':'▶'..ariaLabel='${r.title}を再生'; play.addEventListener('click', ((Event _) { playSingle(r); }).toJS);
       final info = HTMLDivElement()..className='item-main';
       final title = document.createElement('strong')..textContent=r.title;
       final date = DateTime.tryParse(r.createdAt)?.toLocal();
@@ -228,12 +228,13 @@ class App {
   void stopTracks(){for(final t in stream?.getTracks().toDart??<MediaStreamTrack>[])t.stop();stream=null;}
 
   Future<void> playRecording(Recording r) async {if(current?.id==r.id&&audio.src.isNotEmpty){togglePlay();return;}try{final blob=await bridgeGetBlob(r.id).toDart;if(currentUrl.isNotEmpty)URL.revokeObjectURL(currentUrl);currentUrl=URL.createObjectURL(blob);current=r;audio.src=currentUrl;await audio.play().toDart;await bridgeUpdate(r.id,jsonEncode({'playCount':((r.data['playCount']as num?)?.toInt()??0)+1})).toDart;_updatePlayerMeta();_setMediaSession();renderList();}catch(e){toast('再生できませんでした。ファイルがないか、このブラウザでは対応していない形式です。');}}
+  void playSingle(Recording r){singlePlayback=true;playRecording(r);}
   void togglePlay(){if(current==null){if(recordings.isNotEmpty)playRecording(recordings.first);return;}if(audio.paused){audio.play().toDart.then((_) {}, onError: (_) { toast('再生ボタンをもう一度押してください。'); });}else{audio.pause();}}
-  void playAll(){final queue=playQueue;if(queue.isEmpty){toast('再生するファイルがありません。');return;}repeat='off';_syncButtons();playRecording(queue.first);toast(activePlaylistId==null?'すべての録音を再生します。':'プレイリストを再生します。');}
-  void next(){final queue=playQueue;if(queue.isEmpty)return;final i=current==null?-1:queue.indexWhere((r)=>r.id==current!.id);final ni=shuffle&&queue.length>1?_randomOther(i,queue.length):i+1;if(ni>=queue.length){if(repeat=='all')playRecording(queue.first);else audio.pause();}else playRecording(queue[ni]);}
-  void previous(){if(audio.currentTime>4){audio.currentTime=0;return;}final queue=playQueue;if(queue.isEmpty)return;final i=queue.indexWhere((r)=>r.id==current?.id);if(i>0)playRecording(queue[i-1]);else if(repeat=='all')playRecording(queue.last);}
+  void playAll(){final queue=playQueue;if(queue.isEmpty){toast('再生するファイルがありません。');return;}singlePlayback=false;repeat='off';_syncButtons();playRecording(queue.first);toast(activePlaylistId==null?'すべての録音を再生します。':'プレイリストを再生します。');}
+  void next(){singlePlayback=false;final queue=playQueue;if(queue.isEmpty)return;final i=current==null?-1:queue.indexWhere((r)=>r.id==current!.id);final ni=shuffle&&queue.length>1?_randomOther(i,queue.length):i+1;if(ni>=queue.length){if(repeat=='all')playRecording(queue.first);else audio.pause();}else playRecording(queue[ni]);}
+  void previous(){singlePlayback=false;if(audio.currentTime>4){audio.currentTime=0;return;}final queue=playQueue;if(queue.isEmpty)return;final i=queue.indexWhere((r)=>r.id==current?.id);if(i>0)playRecording(queue[i-1]);else if(repeat=='all')playRecording(queue.last);}
   int _randomOther(int i,int length){var n=i;while(n==i)n=Random().nextInt(length);return n;}
-  void onEnded(){if(sleepAt!=null&&sleepAt!.millisecondsSinceEpoch==-1){clearSleep();return;}if(repeat=='one'&&current!=null){audio.currentTime=0;audio.play();}else next();}
+  void onEnded(){if(sleepAt!=null&&sleepAt!.millisecondsSinceEpoch==-1){clearSleep();return;}if(repeat=='one'&&current!=null){audio.currentTime=0;audio.play();}else if(singlePlayback){audio.pause();audio.currentTime=0;}else{next();}}
   void _syncPlayer(){final playing=!audio.paused;el<HTMLElement>('playBtn').textContent=playing?'Ⅱ':'▶';el<HTMLElement>('miniPlay').textContent=playing?'Ⅱ':'▶';final d=audio.duration.isFinite?audio.duration:current?.duration??0;el<HTMLElement>('currentTime').textContent=formatTime(audio.currentTime);el<HTMLElement>('totalTime').textContent=formatTime(d);el<HTMLElement>('miniTime').textContent='${formatTime(audio.currentTime)} / ${formatTime(d)}';final progress=d>0?(audio.currentTime/d*1000).clamp(0,1000):0;el<HTMLInputElement>('seek').value=progress.toString();el<HTMLElement>('miniProgress').style.width='${progress/10}%';}
   void _updatePlayerMeta(){final r=current;if(r==null)return;el<HTMLElement>('playerTitle').textContent=r.title;el<HTMLElement>('miniTitle').textContent=r.title;el<HTMLElement>('playerDate').textContent=r.createdAt.split('T').first;el<HTMLElement>('miniPlayer').classList.remove('hidden');el<HTMLElement>('app').classList.add('player-active');}
   void _syncButtons(){el<HTMLElement>('shuffleBtn').classList.toggle('active',shuffle);final b=el<HTMLElement>('repeatBtn');b.classList.toggle('active',repeat!='off');b.textContent=repeat=='one'?'↻¹':'↻';}
