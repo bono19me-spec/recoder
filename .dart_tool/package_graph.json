@@ -1,0 +1,28 @@
+{
+  "roots": [
+    "song_pocket"
+  ],
+  "packages": [
+    {
+      "name": "song_pocket",
+      "version": "1.0.0",
+      "dependencies": [
+        "web"
+      ],
+      "devDependencies": [
+        "lints"
+      ]
+    },
+    {
+      "name": "lints",
+      "version": "6.1.0",
+      "dependencies": []
+    },
+    {
+      "name": "web",
+      "version": "1.1.1",
+      "dependencies": []
+    }
+  ],
+  "configVersion": 1
+}

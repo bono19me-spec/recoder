@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#17152b">
+  <meta name="description" content="端末の中に安全に保存する歌のレコーダー">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>うたポケット</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div><p class="eyebrow">MY SOUND ARCHIVE</p><h1>うたポケット</h1></div>
+      <button id="settingsBtn" class="icon-btn" aria-label="設定">⚙</button>
+    </header>
+
+    <main>
+      <section id="libraryView">
+        <div class="storage-card">
+          <div><span>この端末に保存</span><strong id="storageSummary">読み込み中…</strong></div>
+          <div class="storage-track"><i id="storageBar"></i></div>
+        </div>
+        <div id="compatNotice" class="notice hidden"></div>
+        <div class="tools">
+          <label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="録音を検索"></label>
+          <select id="sortSelect" aria-label="並び替え"><option value="new">新しい順</option><option value="old">古い順</option><option value="title">タイトル順</option><option value="duration">長さ順</option></select>
+        </div>
+        <div class="section-title"><h2>録音一覧</h2><button id="importBtn" class="text-btn">＋ 読み込む</button></div>
+        <div class="library-actions"><button id="playAllBtn" class="play-all">▶ すべて再生</button><button id="createPlaylistBtn" class="outline-action">＋ プレイリスト</button><button id="deletePlaylistBtn" class="playlist-delete hidden" aria-label="プレイリストを削除">⌫</button></div>
+        <div id="playlistTabs" class="playlist-tabs"></div>
+        <input id="fileInput" type="file" accept="audio/*" multiple hidden>
+        <div id="recordingList" class="recording-list"></div>
+        <div id="emptyState" class="empty-state"><div class="empty-disc">♪</div><h2>最初の歌を録音しましょう</h2><p>録音はサーバーへ送信されず、<br>この端末だけに保存されます。</p></div>
+      </section>
+
+      <section id="recordView" class="view hidden">
+        <button id="recordCloseBtn" class="back-btn">×</button>
+        <div class="record-stage">
+          <p id="recordState" class="record-state">録音の準備ができました</p>
+          <div id="recordOrb" class="record-orb"><i></i><b>●</b></div>
+          <time id="recordTime">00:00</time>
+          <div class="level"><i id="levelBar"></i></div>
+          <p class="keep-open">安定して録音するため、この画面を開いたまま<br>画面をロックしないでください。</p>
+          <div id="recordActions" class="record-actions hidden">
+            <button id="pauseRecordBtn" class="round secondary">Ⅱ</button>
+            <button id="stopRecordBtn" class="round stop">■</button>
+            <button id="cancelRecordBtn" class="round secondary">×</button>
+          </div>
+          <button id="startInsideBtn" class="primary wide">録音を開始</button>
+        </div>
+      </section>
+
+      <section id="playerView" class="view hidden">
+        <button id="playerCloseBtn" class="back-btn">⌄</button>
+        <div class="player-art"><div>♪</div></div>
+        <h2 id="playerTitle">録音が選択されていません</h2><p id="playerDate"></p>
+        <input id="seek" class="seek" type="range" min="0" max="1000" value="0">
+        <div class="times"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
+        <div class="transport"><button id="shuffleBtn">⤨</button><button id="prevBtn">|◀</button><button id="backBtn">−10</button><button id="playBtn" class="main-play">▶</button><button id="forwardBtn">+10</button><button id="nextBtn">▶|</button><button id="repeatBtn">↻</button></div>
+        <button id="timerBtn" class="timer-btn">◷ スリープタイマー：オフ</button>
+      </section>
+
+      <section id="settingsView" class="view hidden">
+        <div class="view-head"><button id="settingsCloseBtn" class="back-btn static">‹</button><h2>設定</h2></div>
+        <div class="settings-group"><h3>ストレージ</h3><div class="setting-row"><span>録音ファイル</span><strong id="settingsCount">0件</strong></div><div class="setting-row"><span>アプリの使用量</span><strong id="settingsUsage">0 B</strong></div><div class="setting-row"><span>推定空き容量</span><strong id="settingsFree">確認中</strong></div><div class="setting-row"><span>永続保存の状態</span><strong id="persistState">確認中</strong></div><button id="persistBtn" class="secondary-btn">永続保存をリクエスト</button></div>
+        <div class="settings-group"><h3>バックアップと復元</h3><button id="exportMetaBtn" class="setting-button">メタデータをバックアップ <span>›</span></button><button id="exportAllBtn" class="setting-button">すべてのファイルを書き出す <span>›</span></button><p class="help">ブラウザのデータを削除すると録音も消える場合があります。大切なファイルは定期的に書き出してください。</p></div>
+        <div class="settings-group"><h3>互換性</h3><div id="compatDetails" class="compat-grid"></div></div>
+        <div class="settings-group danger-zone"><h3>データ</h3><button id="deleteAllBtn">すべてのデータを削除</button></div>
+        <p class="version">うたポケット 1.0.0 · Dart Web</p>
+      </section>
+    </main>
+
+    <button id="recordFab" class="record-fab"><i></i><span>録音</span></button>
+    <div id="miniPlayer" class="mini-player hidden"><button id="miniInfo"><span>♪</span><div><strong id="miniTitle"></strong><small id="miniTime"></small></div></button><button id="miniPlay">▶</button><button id="miniNext">▶|</button></div>
+    <div id="toast" class="toast"></div>
+    <audio id="audio" preload="metadata"></audio>
+  </div>
+  <script src="interop.js"></script>
+  <script defer src="main.dart.js"></script>
+</body>
+</html>
