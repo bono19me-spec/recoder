@@ -3791,53 +3791,54 @@ else this.aa()},
 bZ(){var s=this.Q
 if(s!=null&&A.d(s.state)!=="inactive"){this.n("\u5148\u306b\u9332\u97f3\u3092\u4fdd\u5b58\u307e\u305f\u306f\u30ad\u30e3\u30f3\u30bb\u30eb\u3057\u3066\u304f\u3060\u3055\u3044\u3002")
 return}this.aa()},
-ar(){var s=0,r=A.Q(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e
+ar(){var s=0,r=A.Q(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e,d
 var $async$ar=A.R(function(a,b){if(a===1){o.push(b)
 s=p}for(;;)switch(s){case 0:if(!J.H(n.k2.i(0,"secure"),!0)){n.n("\u30de\u30a4\u30af\u306fHTTPS\u307e\u305f\u306flocalhost\u3067\u306e\u307f\u5229\u7528\u3067\u304d\u307e\u3059\u3002")
 s=1
 break}if(!J.H(n.k2.i(0,"media"),!0)||!J.H(n.k2.i(0,"recorder"),!0)){n.n("\u3053\u306e\u30d6\u30e9\u30a6\u30b6\u306f\u9332\u97f3\u306b\u5bfe\u5fdc\u3057\u3066\u3044\u307e\u305b\u3093\u3002\u6700\u65b0\u7248\u306eSafari\u307e\u305f\u306fChrome\u3092\u3054\u5229\u7528\u304f\u3060\u3055\u3044\u3002")
 s=1
 break}p=4
-m={audio:!0}
-j=v.G
+m={sampleRate:48e3,sampleSize:16,echoCancellation:!1,autoGainControl:!1,noiseSuppression:!1,channelCount:2}
+l={audio:m}
+i=v.G
 s=7
-return A.k(A.G(A.a(A.a(A.a(A.a(j.window).navigator).mediaDevices).getUserMedia(m)),t.m),$async$ar)
+return A.k(A.G(A.a(A.a(A.a(A.a(i.window).navigator).mediaDevices).getUserMedia(l)),t.m),$async$ar)
 case 7:n.as=b
-i=A.c4(new A.K(B.I,t.au.a(new A.eu()),t.bw),t.N)
-l=i==null?"":i
-h=J.b4(l)
-g=n.as
-if(h===0){h=j.MediaRecorder
-g.toString
-g=A.a(new h(g))
-h=g}else{h=j.MediaRecorder
-g.toString
-g=A.a(new h(g,{mimeType:l,audioBitsPerSecond:128e3}))
-h=g}n.Q=h
+h=A.c4(new A.K(B.I,t.au.a(new A.eu()),t.bw),t.N)
+k=h==null?"":h
+g=J.b4(k)
+f=n.as
+if(g===0){g=i.MediaRecorder
+f.toString
+f=A.a(new g(f))
+g=f}else{g=i.MediaRecorder
+f.toString
+f=A.a(new g(f,{mimeType:k,audioBitsPerSecond:192e3}))
+g=f}n.Q=g
 B.a.aP(n.at)
 n.id=!1
 n.cy=B.j
 n.db=null
 n.CW=new A.y(Date.now(),0,!1)
-h=n.Q
-h.toString
-h.ondataavailable=A.e(new A.ev(n))
-h=n.Q
-h.toString
-h.onstop=A.e(new A.ew(n))
+g=n.Q
+g.toString
+g.ondataavailable=A.e(new A.ev(n))
+g=n.Q
+g.toString
+g.onstop=A.e(new A.ew(n))
 n.Q.start(2000)
-A.a(A.a(A.b(A.a(j.document).getElementById("recordOrb"))).classList).add("active")
-A.a(A.b(A.a(j.document).getElementById("recordState"))).textContent="\u9332\u97f3\u4e2d"
-A.a(A.a(A.b(A.a(j.document).getElementById("recordActions"))).classList).remove("hidden")
-A.a(A.a(A.b(A.a(j.document).getElementById("startInsideBtn"))).classList).add("hidden")
+A.a(A.a(A.b(A.a(i.document).getElementById("recordOrb"))).classList).add("active")
+A.a(A.b(A.a(i.document).getElementById("recordState"))).textContent="\u9332\u97f3\u4e2d"
+A.a(A.a(A.b(A.a(i.document).getElementById("recordActions"))).classList).remove("hidden")
+A.a(A.a(A.b(A.a(i.document).getElementById("startInsideBtn"))).classList).add("hidden")
 n.ax=A.hJ(B.y,new A.ex(n))
 p=2
 s=6
 break
 case 4:p=3
-e=o.pop()
-k=A.ae(e)
-n.n(A.kF(J.af(k)))
+d=o.pop()
+j=A.ae(d)
+n.n(A.kF(J.af(j)))
 n.b4()
 s=6
 break

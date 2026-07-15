@@ -208,11 +208,19 @@ class App {
     if (capabilities['secure'] != true) { toast('マイクはHTTPSまたはlocalhostでのみ利用できます。'); return; }
     if (capabilities['media'] != true || capabilities['recorder'] != true) { toast('このブラウザは録音に対応していません。最新版のSafariまたはChromeをご利用ください。'); return; }
     try {
-      final constraints = MediaStreamConstraints(audio: true.toJS);
+      final musicConstraints = MediaTrackConstraints(
+        sampleRate: 48000.toJS,
+        sampleSize: 16.toJS,
+        channelCount: 2.toJS,
+        echoCancellation: false.toJS,
+        noiseSuppression: false.toJS,
+        autoGainControl: false.toJS,
+      );
+      final constraints = MediaStreamConstraints(audio: musicConstraints);
       stream = await window.navigator.mediaDevices.getUserMedia(constraints).toDart;
       const candidates=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'];
       final mime=candidates.where((type) => MediaRecorder.isTypeSupported(type)).firstOrNull ?? '';
-      recorder = mime.isEmpty ? MediaRecorder(stream!) : MediaRecorder(stream!, MediaRecorderOptions(mimeType:mime,audioBitsPerSecond:128000));
+      recorder = mime.isEmpty ? MediaRecorder(stream!) : MediaRecorder(stream!, MediaRecorderOptions(mimeType:mime,audioBitsPerSecond:192000));
       chunks.clear(); cancelling=false; paused=Duration.zero; pauseStarted=null; startedAt=DateTime.now();
       recorder!.ondataavailable = ((BlobEvent e) { if(e.data.size>0) chunks.add(e.data); }).toJS;
       recorder!.onstop = ((Event _) { finishRecording(); }).toJS;
