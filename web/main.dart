@@ -60,8 +60,9 @@ class App {
   bool singlePlayback = false;
   String repeat = 'off';
   String query = '';
-  String sort = 'new';
+  String sort = 'old';
   bool cancelling = false;
+  List<String> playbackQueueIds = [];
   Map<String, dynamic> capabilities = {};
 
   Future<void> init() async {
@@ -97,7 +98,7 @@ class App {
     on('searchInput', 'input', (e) { query = (e.target as HTMLInputElement).value.toLowerCase(); renderList(); });
     on('sortSelect', 'change', (e) { sort = (e.target as HTMLSelectElement).value; renderList(); });
     on('playBtn', 'click', (_) => togglePlay()); on('miniPlay', 'click', (_) => togglePlay());
-    on('prevBtn', 'click', (_) => previous()); on('nextBtn', 'click', (_) => next()); on('miniNext', 'click', (_) => next());
+    on('prevBtn', 'click', (_) => previous()); on('miniPrev', 'click', (_) => previous()); on('nextBtn', 'click', (_) => next()); on('miniNext', 'click', (_) => next());
     on('backBtn', 'click', (_) => audio.currentTime = max(0, audio.currentTime - 10));
     on('forwardBtn', 'click', (_) => audio.currentTime = min(audio.duration, audio.currentTime + 10));
     on('shuffleBtn', 'click', (_) { shuffle = !shuffle; _syncButtons(); toast(shuffle ? 'シャッフルをオンにしました。' : 'シャッフルをオフにしました。'); });
@@ -148,9 +149,11 @@ class App {
     return ids.map((id) => recordings.where((r) => r.id == id).firstOrNull).whereType<Recording>().toList();
   }
 
+  List<Recording> get sortedPlayQueue {final list=playQueue.toList();list.sort((a,b)=>switch(sort){'new'=>b.createdAt.compareTo(a.createdAt),'title'=>a.title.compareTo(b.title),'duration'=>b.duration.compareTo(a.duration),_=>a.createdAt.compareTo(b.createdAt)});return list;}
+  List<Recording> get playbackQueue {final resolved=playbackQueueIds.map((id)=>recordings.where((r)=>r.id==id).firstOrNull).whereType<Recording>().toList();return resolved.isEmpty?sortedPlayQueue:resolved;}
+
   void renderList() {
-    final list = playQueue.where((r) => r.title.toLowerCase().contains(query)).toList();
-    list.sort((a,b) => switch(sort) {'old' => a.createdAt.compareTo(b.createdAt), 'title' => a.title.compareTo(b.title), 'duration' => b.duration.compareTo(a.duration), _ => b.createdAt.compareTo(a.createdAt)});
+    final list = sortedPlayQueue.where((r) => r.title.toLowerCase().contains(query)).toList();
     final host = el<HTMLDivElement>('recordingList'); host.textContent = '';
     for (final r in list) {
       final item = HTMLDivElement()..className='recording-item';
@@ -228,22 +231,23 @@ class App {
   void stopTracks(){for(final t in stream?.getTracks().toDart??<MediaStreamTrack>[])t.stop();stream=null;}
 
   Future<void> playRecording(Recording r) async {if(current?.id==r.id&&audio.src.isNotEmpty){togglePlay();return;}try{final blob=await bridgeGetBlob(r.id).toDart;if(currentUrl.isNotEmpty)URL.revokeObjectURL(currentUrl);currentUrl=URL.createObjectURL(blob);current=r;audio.src=currentUrl;await audio.play().toDart;await bridgeUpdate(r.id,jsonEncode({'playCount':((r.data['playCount']as num?)?.toInt()??0)+1})).toDart;_updatePlayerMeta();_setMediaSession();renderList();}catch(e){toast('再生できませんでした。ファイルがないか、このブラウザでは対応していない形式です。');}}
-  void playSingle(Recording r){singlePlayback=true;playRecording(r);}
+  void playSingle(Recording r){singlePlayback=true;playbackQueueIds=[r.id];renderPlayerQueue();playRecording(r);}
   void togglePlay(){if(current==null){if(recordings.isNotEmpty)playRecording(recordings.first);return;}if(audio.paused){audio.play().toDart.then((_) {}, onError: (_) { toast('再生ボタンをもう一度押してください。'); });}else{audio.pause();}}
-  void playAll(){final queue=playQueue;if(queue.isEmpty){toast('再生するファイルがありません。');return;}singlePlayback=false;repeat='off';_syncButtons();playRecording(queue.first);toast(activePlaylistId==null?'すべての録音を再生します。':'プレイリストを再生します。');}
-  void next(){singlePlayback=false;final queue=playQueue;if(queue.isEmpty)return;final i=current==null?-1:queue.indexWhere((r)=>r.id==current!.id);final ni=shuffle&&queue.length>1?_randomOther(i,queue.length):i+1;if(ni>=queue.length){if(repeat=='all')playRecording(queue.first);else audio.pause();}else playRecording(queue[ni]);}
-  void previous(){singlePlayback=false;if(audio.currentTime>4){audio.currentTime=0;return;}final queue=playQueue;if(queue.isEmpty)return;final i=queue.indexWhere((r)=>r.id==current?.id);if(i>0)playRecording(queue[i-1]);else if(repeat=='all')playRecording(queue.last);}
+  void playAll(){final queue=sortedPlayQueue;if(queue.isEmpty){toast('再生するファイルがありません。');return;}singlePlayback=false;playbackQueueIds=queue.map((r)=>r.id).toList();repeat='off';_syncButtons();renderPlayerQueue();playRecording(queue.first);toast(activePlaylistId==null?'すべての録音を再生します。':'プレイリストを再生します。');}
+  void next(){singlePlayback=false;if(playbackQueueIds.length<=1)playbackQueueIds=sortedPlayQueue.map((r)=>r.id).toList();final queue=playbackQueue;if(queue.isEmpty)return;final i=current==null?-1:queue.indexWhere((r)=>r.id==current!.id);final ni=shuffle&&queue.length>1?_randomOther(i,queue.length):i+1;if(ni>=queue.length){if(repeat=='all')playRecording(queue.first);else audio.pause();}else playRecording(queue[ni]);renderPlayerQueue();}
+  void previous(){singlePlayback=false;if(audio.currentTime>4){audio.currentTime=0;return;}if(playbackQueueIds.length<=1)playbackQueueIds=sortedPlayQueue.map((r)=>r.id).toList();final queue=playbackQueue;if(queue.isEmpty)return;final i=queue.indexWhere((r)=>r.id==current?.id);if(i>0)playRecording(queue[i-1]);else if(repeat=='all')playRecording(queue.last);renderPlayerQueue();}
   int _randomOther(int i,int length){var n=i;while(n==i)n=Random().nextInt(length);return n;}
   void onEnded(){if(sleepAt!=null&&sleepAt!.millisecondsSinceEpoch==-1){clearSleep();return;}if(repeat=='one'&&current!=null){audio.currentTime=0;audio.play();}else if(singlePlayback){audio.pause();audio.currentTime=0;}else{next();}}
   void _syncPlayer(){final playing=!audio.paused;el<HTMLElement>('playBtn').textContent=playing?'Ⅱ':'▶';el<HTMLElement>('miniPlay').textContent=playing?'Ⅱ':'▶';final d=audio.duration.isFinite?audio.duration:current?.duration??0;el<HTMLElement>('currentTime').textContent=formatTime(audio.currentTime);el<HTMLElement>('totalTime').textContent=formatTime(d);el<HTMLElement>('miniTime').textContent='${formatTime(audio.currentTime)} / ${formatTime(d)}';final progress=d>0?(audio.currentTime/d*1000).clamp(0,1000):0;el<HTMLInputElement>('seek').value=progress.toString();el<HTMLElement>('miniProgress').style.width='${progress/10}%';}
-  void _updatePlayerMeta(){final r=current;if(r==null)return;el<HTMLElement>('playerTitle').textContent=r.title;el<HTMLElement>('miniTitle').textContent=r.title;el<HTMLElement>('playerDate').textContent=r.createdAt.split('T').first;el<HTMLElement>('miniPlayer').classList.remove('hidden');el<HTMLElement>('app').classList.add('player-active');}
+  void _updatePlayerMeta(){final r=current;if(r==null)return;el<HTMLElement>('playerTitle').textContent=r.title;el<HTMLElement>('miniTitle').textContent=r.title;el<HTMLElement>('playerDate').textContent=r.createdAt.split('T').first;el<HTMLElement>('miniPlayer').classList.remove('hidden');el<HTMLElement>('app').classList.add('player-active');renderPlayerQueue();}
+  void renderPlayerQueue(){final queue=playbackQueue;final host=el<HTMLElement>('playerQueue');host.textContent='';el<HTMLElement>('queueCount').textContent='${queue.length}曲';for(var i=0;i<queue.length;i++){final r=queue[i],isCurrent=r.id==current?.id;final button=HTMLButtonElement()..className='queue-item ${isCurrent?'current':''}';final number=document.createElement('span')..className='queue-number'..textContent='${i+1}';final info=HTMLDivElement();final title=document.createElement('strong')..textContent=r.title;final detail=document.createElement('small')..textContent=formatTime(r.duration);info.append(title);info.append(detail);final state=document.createElement('span')..className='queue-playing'..textContent=isCurrent?'♪':'';button.append(number);button.append(info);button.append(state);button.addEventListener('click',((Event _){singlePlayback=false;playRecording(r);}).toJS);host.append(button);}}
   void _syncButtons(){el<HTMLElement>('shuffleBtn').classList.toggle('active',shuffle);final b=el<HTMLElement>('repeatBtn');b.classList.toggle('active',repeat!='off');b.textContent=repeat=='one'?'↻¹':'↻';}
 
   Future<void> toggleFavorite(Recording r) async{await bridgeUpdate(r.id,jsonEncode({'favorite':!r.favorite})).toDart;await reload();renderPlaylists();}
   Future<void> createPlaylist([Recording? add]) async {final name=window.prompt('新しいプレイリスト名')?.trim();if(name==null||name.isEmpty)return;final now=DateTime.now();final row={'id':'playlist-${now.microsecondsSinceEpoch}','name':name,'recordingIds':add==null?<String>[]:<String>[add.id],'createdAt':now.toUtc().toIso8601String()};await bridgeSavePlaylist(jsonEncode(row)).toDart;if(add==null)activePlaylistId=row['id'] as String;await reloadPlaylists();if(add!=null)openSheet(add);toast('プレイリスト「$name」を作成しました。');}
   Future<void> addToPlaylist(Recording r) async {if(playlists.isEmpty){await createPlaylist();if(playlists.isEmpty)return;}final names=playlists.map((p)=>p['name']).join(' / ');final name=window.prompt('追加先を入力してください：$names',playlists.first['name'] as String)?.trim();final p=playlists.where((x)=>x['name']==name).firstOrNull;if(p==null){toast('プレイリストが見つかりません。');return;}final ids=List<String>.from(p['recordingIds'] as List? ?? const []);if(!ids.contains(r.id))ids.add(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;await reloadPlaylists();toast('「${p['name']}」に追加しました。');}
   Future<void> deletePlaylist(Map<String,dynamic> p) async {if(!window.confirm('プレイリスト「${p['name']}」を削除しますか？録音ファイルは削除されません。'))return;await bridgeRemovePlaylist(p['id'] as String).toDart;activePlaylistId=null;await reloadPlaylists();}
-  Future<void> deleteRecording(Recording r) async {if(!window.confirm('「${r.title}」を削除しますか？この操作は元に戻せません。'))return;await bridgeRemove(r.id).toDart;for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;}if(current?.id==r.id){audio.pause();audio.removeAttribute('src');current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');el<HTMLElement>('app').classList.remove('player-active');}await reload();await reloadPlaylists();await refreshStorage();toast('削除しました。');}
+  Future<void> deleteRecording(Recording r) async {if(!window.confirm('「${r.title}」を削除しますか？この操作は元に戻せません。'))return;await bridgeRemove(r.id).toDart;playbackQueueIds.remove(r.id);for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const [])..remove(r.id);p['recordingIds']=ids;await bridgeSavePlaylist(jsonEncode(p)).toDart;}if(current?.id==r.id){audio.pause();audio.removeAttribute('src');current=null;el<HTMLElement>('miniPlayer').classList.add('hidden');el<HTMLElement>('app').classList.remove('player-active');}await reload();await reloadPlaylists();renderPlayerQueue();await refreshStorage();toast('削除しました。');}
   void recordingMenu(Recording r) => openSheet(r);
   void openSheet(Recording r){sheetRecording=r;el<HTMLElement>('sheetTitle').textContent=r.title;final host=el<HTMLElement>('sheetPlaylistChoices');host.textContent='';for(final p in playlists){final ids=List<String>.from(p['recordingIds'] as List? ?? const []);final button=HTMLButtonElement()..textContent=p['name'] as String..className=ids.contains(r.id)?'added':'';button.addEventListener('click',((Event _){toggleSheetPlaylist(p,r);}).toJS);host.append(button);}el<HTMLElement>('sheetRemoveFromPlaylist').classList.toggle('hidden',activePlaylistId==null||activePlaylistId=='__favorites__');el<HTMLElement>('actionSheet').classList.remove('hidden');}
   void closeSheet(){el<HTMLElement>('actionSheet').classList.add('hidden');sheetRecording=null;}

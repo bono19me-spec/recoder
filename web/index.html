@@ -26,7 +26,7 @@
         <div id="compatNotice" class="notice hidden"></div>
         <div class="tools">
           <label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="録音を検索"></label>
-          <select id="sortSelect" aria-label="並び替え"><option value="new">新しい順</option><option value="old">古い順</option><option value="title">タイトル順</option><option value="duration">長さ順</option></select>
+          <select id="sortSelect" aria-label="並び替え"><option value="new">新しい順</option><option value="old" selected>古い順</option><option value="title">タイトル順</option><option value="duration">長さ順</option></select>
         </div>
         <div class="section-title"><h2>録音一覧</h2><button id="importBtn" class="text-btn">＋ 読み込む</button></div>
         <div class="library-actions"><button id="playAllBtn" class="play-all">▶ すべて再生</button><button id="createPlaylistBtn" class="outline-action">＋ プレイリスト</button><button id="deletePlaylistBtn" class="playlist-delete hidden" aria-label="プレイリストを削除">⌫</button></div>
@@ -61,6 +61,7 @@
         <div class="times"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
         <div class="transport"><button id="shuffleBtn">⤨</button><button id="prevBtn">|◀</button><button id="backBtn">−10</button><button id="playBtn" class="main-play">▶</button><button id="forwardBtn">+10</button><button id="nextBtn">▶|</button><button id="repeatBtn">↻</button></div>
         <button id="timerBtn" class="timer-btn">◷ スリープタイマー：オフ</button>
+        <section class="up-next"><div class="up-next-head"><h3>次のトラック</h3><span id="queueCount"></span></div><div id="playerQueue" class="player-queue"></div></section>
       </section>
 
       <section id="settingsView" class="view hidden">
@@ -74,7 +75,7 @@
     </main>
 
     <button id="recordFab" class="record-fab"><i></i><span>録音</span></button>
-    <div id="miniPlayer" class="mini-player hidden"><div class="mini-progress"><i id="miniProgress"></i></div><button id="miniInfo"><span>♪</span><div><strong id="miniTitle"></strong><small id="miniTime"></small></div><b class="swipe-hint">⌃</b></button><button id="miniPlay" aria-label="再生・一時停止">▶</button><button id="miniNext" aria-label="次の曲">▶|</button></div>
+    <div id="miniPlayer" class="mini-player hidden"><div class="mini-progress"><i id="miniProgress"></i></div><button id="miniInfo"><span>♪</span><div><strong id="miniTitle"></strong><small id="miniTime"></small></div><b class="swipe-hint">⌃</b></button><div class="mini-controls"><button id="miniPrev" aria-label="前の曲">|◀</button><button id="miniPlay" aria-label="再生・一時停止">▶</button><button id="miniNext" aria-label="次の曲">▶|</button></div></div>
     <div id="actionSheet" class="sheet-backdrop hidden">
       <section class="action-sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
         <h2 id="sheetTitle"></h2>
