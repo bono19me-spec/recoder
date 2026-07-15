@@ -114,7 +114,6 @@ class App {
     on('sheetDelete', 'click', (_) { final r=sheetRecording;closeSheet();if(r!=null)deleteRecording(r); });
     on('sheetRemoveFromPlaylist', 'click', (_) => removeSheetRecordingFromPlaylist());
     on('sheetNewPlaylist', 'click', (_) => createPlaylist(sheetRecording));
-    on('timerSheet', 'touchstart', sheetTouchStart);on('timerSheet', 'touchend', sheetTouchEnd);
     on('timerSheetClose', 'click', (_) => closeTimerSheet());on('timerSheet', 'click', (e){if(e.target==el<HTMLElement>('timerSheet'))closeTimerSheet();});
     on('timerOff', 'click', (_) => setSleepMinutes(0));on('timer10', 'click', (_) => setSleepMinutes(10));on('timer20', 'click', (_) => setSleepMinutes(20));on('timer30', 'click', (_) => setSleepMinutes(30));on('timer60', 'click', (_) => setSleepMinutes(60));on('timerTrack', 'click', (_) => setSleepAfterTrack());
     on('customTimerApply', 'click', (_) { final m=el<HTMLInputElement>('customTimerMinutes').valueAsNumber;if(m.isFinite&&m>0)setSleepMinutes(m.round());else toast('1分以上の時間を入力してください。'); });
