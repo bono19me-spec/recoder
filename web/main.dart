@@ -46,6 +46,7 @@ class App {
   Recording? sheetRecording;
   double? miniTouchStartY;
   double? playerTouchStartY, sheetTouchStartY;
+  bool playerSwipeCanCollapse = false;
   bool playerHistoryActive = false;
   Recording? current;
   MediaRecorder? recorder;
@@ -106,8 +107,8 @@ class App {
     on('timerBtn', 'click', (_) => openTimerSheet()); on('miniInfo', 'click', (_) => expandPlayer());
     on('miniPlayer', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);if(t!=null)miniTouchStartY=t.clientY.toDouble(); });
     on('miniPlayer', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&miniTouchStartY!=null&&miniTouchStartY!-t.clientY>35)expandPlayer();miniTouchStartY=null; });
-    on('playerView', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);if(t!=null)playerTouchStartY=t.clientY.toDouble(); });
-    on('playerView', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(t!=null&&playerTouchStartY!=null&&t.clientY-playerTouchStartY!>55)collapsePlayer();playerTouchStartY=null; });
+    on('playerView', 'touchstart', (e) { final t=(e as TouchEvent).touches.item(0);playerSwipeCanCollapse=el<HTMLElement>('playerView').scrollTop<=1;if(t!=null)playerTouchStartY=t.clientY.toDouble(); });
+    on('playerView', 'touchend', (e) { final t=(e as TouchEvent).changedTouches.item(0);if(playerSwipeCanCollapse&&t!=null&&playerTouchStartY!=null&&t.clientY-playerTouchStartY!>70)collapsePlayer();playerTouchStartY=null;playerSwipeCanCollapse=false; });
     on('sheetClose', 'click', (_) => closeSheet()); on('actionSheet', 'click', (e) { if(e.target==el<HTMLElement>('actionSheet'))closeSheet(); });
     on('sheetRename', 'click', (_) => sheetRename()); on('sheetExport', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r);closeSheet(); });
     on('sheetShare', 'click', (_) { final r=sheetRecording;if(r!=null)exportOne(r,share:true);closeSheet(); });
@@ -156,6 +157,13 @@ class App {
     final host = el<HTMLDivElement>('recordingList'); host.textContent = '';
     for (final r in list) {
       final item = HTMLDivElement()..className='recording-item';
+      Timer? longPressTimer;double? pressX,pressY;var longPressed=false;
+      item.addEventListener('touchstart',((TouchEvent e){final t=e.touches.item(0);if(t==null)return;pressX=t.clientX.toDouble();pressY=t.clientY.toDouble();longPressed=false;longPressTimer=Timer(const Duration(milliseconds:550),(){longPressed=true;openSheet(r);});}).toJS);
+      item.addEventListener('touchmove',((TouchEvent e){final t=e.touches.item(0);if(t==null||pressX==null||pressY==null)return;if((t.clientX-pressX!).abs()>10||(t.clientY-pressY!).abs()>10)longPressTimer?.cancel();}).toJS);
+      item.addEventListener('touchend',((TouchEvent _){longPressTimer?.cancel();if(longPressed)Timer(const Duration(milliseconds:450),()=>longPressed=false);}).toJS);
+      item.addEventListener('touchcancel',((TouchEvent _){longPressTimer?.cancel();longPressed=false;}).toJS);
+      item.addEventListener('click',((Event e){if(longPressed){e.preventDefault();e.stopPropagation();}}).toJS,true.toJS);
+      item.addEventListener('contextmenu',((Event e){e.preventDefault();if(!longPressed)openSheet(r);}).toJS);
       final play = HTMLButtonElement()..className='item-play'..textContent=current?.id==r.id&&!audio.paused?'Ⅱ':'▶'..ariaLabel='${r.title}を再生'; play.addEventListener('click', ((Event _) { playSingle(r); }).toJS);
       final info = HTMLDivElement()..className='item-main';
       final title = document.createElement('strong')..textContent=r.title;
