@@ -24,6 +24,6 @@
     removePlaylist:async id=>{const d=await db();await new Promise((resolve,reject)=>{const t=d.transaction(PLAYLISTS,'readwrite');t.objectStore(PLAYLISTS).delete(id);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})},
     download:(blob,name)=>{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000)},
     share:async(blob,name,title)=>{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title});return true}return false},
-    registerSw:()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('service_worker.js').catch(()=>{})}
+    registerSw:()=>{if(!('serviceWorker'in navigator))return;let refreshing=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(refreshing)return;refreshing=true;location.reload()});navigator.serviceWorker.register('service_worker.js',{updateViaCache:'none'}).then(registration=>registration.update()).catch(()=>{})}
   };
 })();
